@@ -26,8 +26,8 @@ docker-build: docker-pull  ## pull and build docker images
 	docker build \
     --build-arg "DOCKER_UID=${DOCKER_UID}" \
     --build-arg "DOCKER_UGID=${DOCKER_UGID}" \
-    . \
-    -t local/yaota8266:latest
+    -t local/yaota8266:latest \
+    . 
 
 
 update: check-user-id docker-build  ## update git repositories/submodules, docker images and build local docker images
@@ -36,22 +36,37 @@ update: check-user-id docker-build  ## update git repositories/submodules, docke
 
 
 shell: docker-build  ## start a bash shell in docker container "local/yaota8266:latest"
-	docker run -it \
+	 docker run --rm -it \
     -e "DOCKER_UID=${DOCKER_UID}" \
     -e "DOCKER_UGID=${DOCKER_UGID}" \
-    --mount type=bind,src=${PWD}/yaota8266/,dst=/mpy/yaota8266/ \
+    -v ${PWD}/yaota8266/:/mpy/yaota8266/ \
     local/yaota8266:latest \
     /bin/bash
 
 
 rsa-keys: check-user-id ## Generate RSA keys and/or print RSA modulus line for copy&paste into config.h
-	$(MAKE) -C yaota8266 rsa-keys
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		local/yaota8266:latest \
+	/bin/bash -c "$(MAKE) -C yaota8266 rsa-keys"
 
 verify: check-user-id  ## Check RSA key, config.h and compiled "yaota8266.bin"
-	$(MAKE) -C yaota8266 verify
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		local/yaota8266:latest \
+	/bin/bash -c "$(MAKE) -C yaota8266 verify"
 
 assert-yaota8266-setup: check-user-id
-	$(MAKE) -C yaota8266 assert-yaota8266-setup
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		local/yaota8266:latest \
+	/bin/bash -c "$(MAKE) -C yaota8266 assert-yaota8266-setup"
 
 build: update assert-yaota8266-setup ## compile the yaota8266/yaota8266.bin
 	@if [ -f ${CONFIG_FILE} ] ; \
@@ -61,9 +76,26 @@ build: update assert-yaota8266-setup ## compile the yaota8266/yaota8266.bin
 		echo -n "\nERROR: Please create '${CONFIG_FILE}' first!\n\n" ; \
 		exit 1 ; \
 	fi
-	docker run \
+	 docker run --rm \
 		-e "DOCKER_UID=${DOCKER_UID}" \
 		-e "DOCKER_UGID=${DOCKER_UGID}" \
-		--mount type=bind,src=${PWD}/yaota8266/,dst=/mpy/yaota8266/ \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
 		local/yaota8266:latest \
 		/bin/bash -c "cd /mpy/yaota8266/ && make clean && make build"
+
+build-firmware: ## build firmware-ota.bin from micropython source
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		local/yaota8266:latest \
+		/bin/bash -c "cd /mpy/micropython/ports/esp8266/ && $(MAKE) ota && mv build-GENERIC/firmware-ota.bin /mpy/yaota8266/"
+
+ota: ## send firmware-ota.bin via ota
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		--net=host \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		local/yaota8266:latest \
+		/bin/bash -c "cd /mpy/yaota8266/ && python3 cli.py ota firmware-ota.bin"
