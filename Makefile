@@ -40,6 +40,7 @@ shell: docker-build  ## start a bash shell in docker container "local/yaota8266:
     -e "DOCKER_UID=${DOCKER_UID}" \
     -e "DOCKER_UGID=${DOCKER_UGID}" \
     -v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+    -v ${PWD}/frozenModules/:/mpy/micropython/frozenModules/ \
     local/yaota8266:latest \
     /bin/bash
 
@@ -90,6 +91,15 @@ build-firmware: ## build firmware-ota.bin from micropython source
 		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
 		local/yaota8266:latest \
 		/bin/bash -c "cd /mpy/micropython/ports/esp8266/ && $(MAKE) ota && mv build-GENERIC/firmware-ota.bin /mpy/yaota8266/"
+
+build-firmware-with-frozen-modules: ## build firmware-ota.bin from micropython source + local frozenModules directory. (this build mode use a fireware size bigger (for let 45 ko for frozen modules) and a smaller filesystem (100 ko on a 1M board) ). Like filesystem size is different than without frozen module version: the first time this mode is used, it is needed to erase all before reflash yaota8266.bin and firmware-ota.bin (via esptool) 
+	 docker run --rm \
+		-e "DOCKER_UID=${DOCKER_UID}" \
+		-e "DOCKER_UGID=${DOCKER_UGID}" \
+		-v ${PWD}/yaota8266/:/mpy/yaota8266/ \
+		-v ${PWD}/frozenModules/:/mpy/micropython/frozenModules/ \
+		local/yaota8266:latest \
+		/bin/bash -c "cd /mpy/micropython/ports/esp8266/ && sed -i "s/0x8f000/0x9a000/" /mpy/micropython/ports/esp8266/boards/esp8266_ota.ld && cp -r /mpy/micropython/frozenModules/* /mpy/micropython/ports/esp8266/modules/ ; $(MAKE) ota && mv build-GENERIC/firmware-ota.bin /mpy/yaota8266/"
 
 ota: ## send firmware-ota.bin via ota
 	 docker run --rm \
